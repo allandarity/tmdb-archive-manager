@@ -7,7 +7,6 @@ import (
 	"github.com/gin-gonic/gin"
 	"log"
 	"net/http"
-	"strconv"
 )
 
 type ErrorMessage struct {
@@ -48,7 +47,7 @@ func AddRoutes(rg *gin.RouterGroup, db *sql.DB) {
 
 		UpdateImdbIdForGivenRow(db, externalId)
 
-		content, err := GetEntryByTmdbId(db, strconv.Itoa(externalId.ID)) //getting the id again for the updated value
+		content, err := GetEntryByTmdbId(db, id) //getting the id again for the updated value
 
 		if err != nil {
 			log.Println(err)
