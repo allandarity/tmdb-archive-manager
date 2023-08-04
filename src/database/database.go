@@ -20,8 +20,15 @@ type ContentEntry struct {
 	ContentType    string         `json:"contentType"`
 }
 
+type PosterEntry struct {
+	Id         int    `json:"id"`
+	ContentId  int    `json:"contentId"`
+	PosterUrl  string `json:"posterUrl"`
+	PosterData []byte `json:"posterData"`
+}
+
 func buildConnectionString() string {
-	return fmt.Sprintf("postgres://%s:%s@db:%s/%s?sslmode=disable",
+	return fmt.Sprintf("postgres://%s:%s@localhost:%s/%s?sslmode=disable",
 		config.ApplicationConfig.Database.Username,
 		config.ApplicationConfig.Database.Password,
 		config.ApplicationConfig.Database.Port,
@@ -76,11 +83,33 @@ func UpdateImdbIdForGivenRow(db *sql.DB, item TmdbTvItem) {
 	}
 
 	fmt.Printf("Rows affected: %d\n", rowsAffected)
-
 }
 
-func GetEntryByTmdbId(db *sql.DB, id string) (ContentEntry, error) {
-	query := fmt.Sprintf("select * from content where tmdb_id = %s", id)
+type Entry interface{}
+
+func UpdatePosterDatabaseEntry(db *sql.DB, id int, column string, entry Entry) {
+	stmt, err := db.Prepare(fmt.Sprintf("update poster set %s = $1 where content_id = $2", column))
+
+	if err != nil {
+		log.Fatal("Error preparing update statement:", err)
+	}
+	defer stmt.Close()
+
+	result, err := stmt.Exec(entry, id)
+	if err != nil {
+		log.Fatal("Error executing update statement:", err)
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		log.Fatal("Error getting rows affected:", err)
+	}
+
+	fmt.Printf("Rows affected: %d\n", rowsAffected)
+}
+
+func GetContentEntryById(db *sql.DB, column string, id string) (ContentEntry, error) {
+	query := fmt.Sprintf("select * from content where %s = %s", column, id)
 	var content ContentEntry
 
 	row := db.QueryRow(query)
@@ -95,6 +124,80 @@ func GetEntryByTmdbId(db *sql.DB, id string) (ContentEntry, error) {
 		return content, err
 	}
 	return content, nil
+}
+
+func GetPosterByContentId(db *sql.DB, id int) (PosterEntry, error) {
+
+	exist, err := doesPosterEntryExist(db, id)
+
+	if err != nil {
+		log.Println(err)
+		return PosterEntry{}, err
+	}
+
+	log.Println(fmt.Sprintf("does it exist? %t", exist))
+
+	if exist {
+		query := "SELECT * from poster where content_id = $1"
+
+		var poster PosterEntry
+		err := db.QueryRow(query, id).Scan(
+			&poster.Id, &poster.ContentId, &poster.PosterUrl, &poster.PosterData)
+
+		if err != nil {
+			if err == sql.ErrNoRows {
+				fmt.Println("No rows found for the given content_id:", id)
+				return PosterEntry{}, err
+			}
+			fmt.Println("Error executing the SELECT query:", err)
+			return PosterEntry{}, err
+		}
+
+		return poster, nil
+	} else {
+		entry, err := insertPosterEntry(db, PosterEntry{}, ContentEntry{Id: id})
+		if err != nil {
+			fmt.Println("Failed creating new poster entry", err)
+			return PosterEntry{}, err
+		}
+
+		return entry, nil
+	}
+}
+
+func doesPosterEntryExist(db *sql.DB, id int) (bool, error) {
+	query := "SELECT * FROM poster WHERE content_id = $1"
+
+	// Execute the query
+	rows, err := db.Query(query, id)
+	if err != nil {
+		log.Println(err)
+		return false, err
+	}
+
+	defer rows.Close()
+
+	if rows.Next() {
+		return true, nil
+	} else {
+		return false, nil
+	}
+}
+
+func insertPosterEntry(db *sql.DB, entry PosterEntry, content ContentEntry) (PosterEntry, error) {
+	fmt.Println("Starting Inserting Poster Data")
+	query := "INSERT INTO poster (content_id, poster_url, poster_data) VALUES ($1, $2, $3) RETURNING content_id, poster_url, poster_data"
+
+	var poster PosterEntry
+	err := db.QueryRow(query, content.Id, entry.PosterUrl, entry.PosterData).Scan(
+		&poster.ContentId, &poster.PosterUrl, &poster.PosterData)
+	if err != nil {
+		fmt.Println("Error executing the INSERT POSTER query:", err)
+		return PosterEntry{}, err
+	}
+	fmt.Println("Finished Inserting Poster Data")
+	fmt.Println(poster)
+	return poster, nil
 }
 
 func BatchInsertTmdbTVData(db *sql.DB, showMap map[int]TvShow) {

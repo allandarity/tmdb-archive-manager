@@ -21,7 +21,7 @@ func AddRoutes(rg *gin.RouterGroup, db *sql.DB) {
 	users.GET("/:tmdbId", func(c *gin.Context) {
 		id := c.Param("tmdbId")
 
-		tmdbId, err := GetEntryByTmdbId(db, id)
+		tmdbId, err := GetContentEntryById(db, "tmdb_id", id)
 
 		if err != nil {
 			log.Println(err)
@@ -45,9 +45,49 @@ func AddRoutes(rg *gin.RouterGroup, db *sql.DB) {
 			return
 		}
 
+		posterId, err := GetPosterByContentId(db, tmdbId.Id)
+
+		if err != nil {
+			log.Println(err)
+			c.JSON(http.StatusInternalServerError, ErrorMessage{
+				Type:    500,
+				Message: "Failed to manage poster",
+				Error:   err,
+			})
+			return
+		}
+		posterPath, err := service.GetPoster(posterId, tmdbId)
+
+		if err != nil {
+			log.Println(err)
+			c.JSON(http.StatusInternalServerError, ErrorMessage{
+				Type:    500,
+				Message: "Failed to get poster from tmdb",
+				Error:   err,
+			})
+			return
+		}
+
+		posterImageData, err := service.FetchImage(posterPath.FilePath)
+
+		if err != nil {
+			log.Println(err)
+			c.JSON(http.StatusInternalServerError, ErrorMessage{
+				Type:    500,
+				Message: "Failed to get poster byte data",
+				Error:   err,
+			})
+			return
+		}
+
 		UpdateImdbIdForGivenRow(db, externalId)
 
-		content, err := GetEntryByTmdbId(db, id) //getting the id again for the updated value
+		//TODO: Make this not 3 sep updates
+		UpdatePosterDatabaseEntry(db, tmdbId.Id, "poster_data", posterImageData)
+		UpdatePosterDatabaseEntry(db, tmdbId.Id, "poster_url", posterPath.FilePath)
+		UpdatePosterDatabaseEntry(db, tmdbId.Id, "content_id", tmdbId.Id)
+
+		content, err := GetContentEntryById(db, "tmdb_id", id) //getting the id again for the updated value
 
 		if err != nil {
 			log.Println(err)
