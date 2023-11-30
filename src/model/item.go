@@ -14,7 +14,6 @@ type TvShow struct {
 }
 
 func ReadDownloadedFileForTvShow(path string) (map[int]TvShow, int, error) {
-	log.Println(path)
 	file, err := os.Open(path)
 	if err != nil {
 		log.Fatal(err)
@@ -31,7 +30,7 @@ func ReadDownloadedFileForTvShow(path string) (map[int]TvShow, int, error) {
 	var tvShow TvShow
 	for _, line := range bytes.Split(byteVal, []byte{'\n'}) {
 		if err := json.Unmarshal(line, &tvShow); err != nil {
-			log.Printf("Reached the end of parssing: error is %s\n", err)
+			log.Printf("Reached the end of parsing: error is %s\n", err)
 		}
 		showMap[tvShow.ID] = tvShow
 	}

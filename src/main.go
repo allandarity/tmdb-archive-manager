@@ -51,7 +51,7 @@ func getFile(contentType ContentType) (file string, err error) {
 		return "", err
 	}
 
-	fmt.Println("Download saved to", resp.Filename)
+	log.Printf("Download saved to %s", resp.Filename)
 
 	return resp.Filename, nil
 }
@@ -92,7 +92,7 @@ func main() {
 
 	_, err := database.RunMigration()
 	if err != nil {
-		log.Printf("error on run migration is: %s", err)
+		log.Fatalf("error on run migration is: %s", err)
 	}
 
 	contentType := TV
@@ -138,5 +138,24 @@ func main() {
 	}
 
 	routes.Run(db)
+	doSecondRoutine()
+}
 
+func doSecondRoutine() {
+
+	//Check the database every 5 minutes for a task
+	intervalTime := time.Duration(5) * time.Minute
+
+	go func() {
+		for {
+			checkDatabaseForStatus()
+			time.Sleep(intervalTime)
+		}
+	}()
+
+	select {}
+}
+
+func checkDatabaseForStatus() {
+	log.Printf("CHECKING STTAUS")
 }

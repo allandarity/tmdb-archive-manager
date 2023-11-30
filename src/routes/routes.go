@@ -16,9 +16,13 @@ type ErrorMessage struct {
 }
 
 func AddRoutes(rg *gin.RouterGroup, db *sql.DB) {
-	users := rg.Group("/tv")
+	tvEndpoint := rg.Group("/tv")
 
-	users.GET("/:tmdbId", func(c *gin.Context) {
+	tvEndpoint.GET("/:tmdbId", func(c *gin.Context) {
+
+		//TODO: add this queue stuff as the below will populate 5 entries but i think ratelimited on pulling the poster
+		//https://webdevstation.com/posts/simple-queue-implementation-in-golang/
+
 		id := c.Param("tmdbId")
 
 		tmdbId, err := GetContentEntryById(db, "tmdb_id", id)
@@ -35,7 +39,7 @@ func AddRoutes(rg *gin.RouterGroup, db *sql.DB) {
 
 		externalId, err := service.ConvertID(tmdbId)
 
-		if err != nil {
+		if err != nil || externalId.ImdbId == "" {
 			log.Println(err)
 			c.JSON(http.StatusInternalServerError, ErrorMessage{
 				Type:    500,
@@ -101,4 +105,21 @@ func AddRoutes(rg *gin.RouterGroup, db *sql.DB) {
 
 		c.JSON(http.StatusOK, content)
 	})
+
+	tvEndpoint.GET("/random/:count", func(c *gin.Context) {
+		count := c.Param("count")
+		contents, err := GetSpecifiedAmountOfContent(db, count)
+
+		if err != nil {
+			log.Println(err)
+			c.JSON(http.StatusInternalServerError, ErrorMessage{
+				Type:    500,
+				Message: "Failed to retrieve content",
+				Error:   err,
+			})
+			return
+		}
+		c.JSON(http.StatusOK, contents)
+	})
+
 }

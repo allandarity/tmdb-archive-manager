@@ -3,7 +3,9 @@ package database
 import (
 	"arhive-manager-go/src/config"
 	. "arhive-manager-go/src/model"
+	"arhive-manager-go/src/util"
 	"database/sql"
+	"errors"
 	"fmt"
 	"github.com/golang-migrate/migrate/v4"
 	"github.com/lib/pq"
@@ -28,7 +30,7 @@ type PosterEntry struct {
 }
 
 func buildConnectionString() string {
-	return fmt.Sprintf("postgres://%s:%s@localhost:%s/%s?sslmode=disable",
+	return fmt.Sprintf("postgres://%s:%s@db:%s/%s?sslmode=disable",
 		config.ApplicationConfig.Database.Username,
 		config.ApplicationConfig.Database.Password,
 		config.ApplicationConfig.Database.Port,
@@ -56,7 +58,7 @@ func GetFinalTmdbTvEntry(db *sql.DB) (int, error) {
 
 	row := db.QueryRow(query)
 	if err := row.Scan(&show.ID); err != nil {
-		if err == sql.ErrNoRows {
+		if errors.Is(err, sql.ErrNoRows) {
 			return show.ID, err
 		}
 		return show.ID, err
@@ -116,7 +118,7 @@ func GetContentEntryById(db *sql.DB, column string, id string) (ContentEntry, er
 	var imdbPopularityNull sql.NullFloat64
 	if err := row.Scan(&content.Id, &content.Title, &content.TmdbId,
 		&content.TmdbPopularity, &content.ImdbId, &imdbPopularityNull, &content.ContentType); err != nil {
-		if err == sql.ErrNoRows {
+		if errors.Is(err, sql.ErrNoRows) {
 			log.Println(err)
 			return content, err
 		}
@@ -124,6 +126,42 @@ func GetContentEntryById(db *sql.DB, column string, id string) (ContentEntry, er
 		return content, err
 	}
 	return content, nil
+}
+
+func GetSpecifiedAmountOfContent(db *sql.DB, count string) ([]ContentEntry, error) {
+
+	if !util.IsNumeric(count) {
+		log.Println("must be numeric")
+		return nil, errors.New("Parameter must be numeric")
+	}
+
+	query := fmt.Sprintf("SELECT * FROM content ORDER BY RANDOM() LIMIT %s", count)
+	rows, err := db.Query(query)
+	if err != nil {
+		log.Println(err)
+		return nil, err
+	}
+	defer rows.Close()
+
+	var contentEntries []ContentEntry
+
+	for rows.Next() {
+		var content ContentEntry
+		var imdbPopularityNull sql.NullFloat64
+		err := rows.Scan(&content.Id, &content.Title, &content.TmdbId,
+			&content.TmdbPopularity, &content.ImdbId, &imdbPopularityNull, &content.ContentType)
+		if err != nil {
+			log.Println(err)
+			return nil, err
+		}
+		contentEntries = append(contentEntries, content)
+	}
+
+	if err := rows.Err(); err != nil {
+		log.Println(err)
+		return nil, err
+	}
+	return contentEntries, nil
 }
 
 func GetPosterByContentId(db *sql.DB, id int) (PosterEntry, error) {
@@ -135,8 +173,6 @@ func GetPosterByContentId(db *sql.DB, id int) (PosterEntry, error) {
 		return PosterEntry{}, err
 	}
 
-	log.Println(fmt.Sprintf("does it exist? %t", exist))
-
 	if exist {
 		query := "SELECT * from poster where content_id = $1"
 
@@ -145,7 +181,7 @@ func GetPosterByContentId(db *sql.DB, id int) (PosterEntry, error) {
 			&poster.Id, &poster.ContentId, &poster.PosterUrl, &poster.PosterData)
 
 		if err != nil {
-			if err == sql.ErrNoRows {
+			if errors.Is(err, sql.ErrNoRows) {
 				fmt.Println("No rows found for the given content_id:", id)
 				return PosterEntry{}, err
 			}

@@ -1,7 +1,6 @@
 package routes
 
 import (
-	"arhive-manager-go/src/config"
 	"database/sql"
 	"github.com/gin-gonic/gin"
 )
@@ -10,12 +9,14 @@ var router = gin.Default()
 
 func Run(db *sql.DB) {
 	router.Use(JSONMiddleware())
-	router.SetTrustedProxies(nil)
+	_ = router.SetTrustedProxies(nil)
 	getRoutes(db)
-	err := router.Run(":" + config.ApplicationConfig.RestPort)
-	if err != nil {
-		panic("Failed to run")
-	}
+
+	go func() {
+		if err := router.Run(":8080"); err != nil {
+			panic(err)
+		}
+	}()
 }
 
 func JSONMiddleware() gin.HandlerFunc {
